@@ -1,0 +1,33 @@
+{
+  "name": "deal-monopoly",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server/app.js",
+    "start-server": "node server/server.js",
+    "start-client": "cd client && npm start",
+    "dev": "concurrently \"npm run start-server\" \"npm run start-client\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@emotion/react": "^11.11.4",
+    "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "^5.15.14",
+    "@mui/material": "^5.15.14",
+    "@mui/styled-engine-sc": "^6.0.0-alpha.18",
+    "antd": "^5.15.4",
+    "express": "^4.19.2",
+    "mongoose": "^8.2.3",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "socket.io": "^4.7.5",
+    "styled-components": "^6.1.8"
+  },
+  "devDependencies": {
+    "@types/mongoose": "^5.11.97",
+    "concurrently": "^8.2.2"
+  }
+}
