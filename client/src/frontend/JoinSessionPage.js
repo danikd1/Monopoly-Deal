@@ -24,11 +24,21 @@ const JoinSessionPage = () => {
                 body: JSON.stringify({ title: title, userName }),
             });
 
+
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            console.log("Successfully joined the session");
+            // Предполагается, что сервер возвращает объект с userId
+            const data = await response.json();
+            if (data.userId) {
+                localStorage.setItem('userId', data.userId); // Сохраняем userId в localStorage
+                console.log('Saved userId:', data.userId);
+                console.log("Successfully joined the session and userId saved");
+            } else {
+                console.log("Successfully joined the session, but no userId returned");
+            }
+
             navigate(`/game/${title}`);
         } catch (error) {
             console.error("Error joining session:", error);

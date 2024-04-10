@@ -4,10 +4,9 @@ const path = require('path');
 const GameSession = require('./models/GameSession');
 const User = require('./models/User');
 const { shuffle, cards } = require('./models/deck');
-
 mongoose.connect('mongodb://localhost:27017/PlayersDB', { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('MongoDB Connected'))
-  .catch(err => console.error('MongoDB connection error:', err));
+    .then(() => console.log('MongoDB Connected'))
+    .catch(err => console.error('MongoDB connection error:', err));
 
 const app = express();
 const PORT = process.env.PORT || 3010;
@@ -68,10 +67,22 @@ app.post('/sessions/join', async (req, res) => {
     // Добавляем пользователя к сессии, если его там еще нет
     if (!session.users.includes(user._id)) {
       session.users.push(user._id);
+
+      // Если это первый игрок в сессии, инициализируем turnOrder и устанавливаем currentTurn
+      if (session.users.length === 1) {
+        session.turnOrder = [user._id];
+        session.currentTurn = user._id;
+      }
     }
 
+    // Проверяем, стали ли мы активными (достигнут максимум игроков)
     if (session.users.length === session.maxPlayers) {
       session.status = 'active';
+      // Убедитесь, что turnOrder полностью инициализирован, если это не было сделано ранее
+      if (session.turnOrder.length !== session.maxPlayers) {
+        session.turnOrder = session.users;
+        session.currentTurn = session.turnOrder[0]; // Начинаем с первого игрока в списке
+      }
     }
 
     // Раздаем карты
@@ -94,12 +105,18 @@ app.post('/sessions/join', async (req, res) => {
 
     await session.save();
 
-    res.status(200).json({ message: 'User joined the session and cards were dealt', session });
+    res.status(200).json({
+      message: 'User joined the session and cards were dealt',
+      userId: user._id, // Возвращаем userId для использования на клиенте
+      session
+    });
+
   } catch (error) {
     console.error('Error joining session:', error);
     res.status(500).send('Server error');
   }
 });
+
 
 /*----------------------------------------------------------------------------------------*/
 // Эндпоинт для получения списка всех активных сессий
@@ -319,7 +336,7 @@ app.post('/sessions/:title/property', async (req, res) => {
 /*----------------------------------------------------------------------------------------*/
 //Эндпоинт для "взятия" карт из колоды
 app.post('/sessions/:title/draw', async (req, res) => {
-  const { userName } = req.body;
+  const { userName, userId } = req.body;
   const { title } = req.params;
 
   try {
@@ -331,6 +348,10 @@ app.post('/sessions/:title/draw', async (req, res) => {
     const user = await User.findOne({ name: userName });
     if (!user) {
       return res.status(404).send('User not found in session');
+    }
+
+    if (session.currentTurn.toString() !== user._id.toString()) {
+      return res.status(403).send("It's not your turn");
     }
 
     // Находим запись карт игрока в сессии
@@ -366,5 +387,89 @@ app.post('/sessions/:title/draw', async (req, res) => {
   } catch (error) {
     console.error('Error drawing cards:', error);
     res.status(500).send('Server error');
+  }
+});
+
+/*----------------------------------------------------------------------------------------*/
+//Эндпоинт для передачи хода следующему игроку
+app.post('/sessions/endTurn/:title', async (req, res) => {
+  try {
+    const { title } = req.params; // Извлекаем title сессии из параметров URL
+    const userId = req.body.userId; // Предполагаем, что userId передаётся в теле запроса
+
+    const session = await GameSession.findOne({ title: title });
+    if (!session) {
+      return res.status(404).send('Session not found');
+    }
+
+    // Проверяем, что действие совершает игрок, чей сейчас ход
+    if (session.currentTurn.toString() !== userId) {
+      return res.status(403).send("It's not your turn");
+    }
+
+    // Логика для перехода к следующему игроку
+    const currentIndex = session.turnOrder.indexOf(session.currentTurn.toString());
+    const nextIndex = (currentIndex + 1) % session.turnOrder.length;
+    session.currentTurn = session.turnOrder[nextIndex];
+
+    await session.save();
+    res.status(200).send('Turn has been moved to the next player');
+  } catch (error) {
+    console.error('Error moving turn:', error);
+    res.status(500).send(error.message);
+  }
+});
+
+
+/*----------------------------------------------------------------------------------------*/
+//Эндпоинт для проверки 3 полных собранных комплекта
+app.get('/sessions/checkFullSet/:title', async (req, res) => {
+  const { title } = req.params;
+
+  try {
+    const session = await GameSession.findOne({ title }).populate('property.playerId');
+
+    if (!session) {
+      return res.status(404).send('Game session not found');
+    }
+
+    const currentPlayerId = session.currentTurn.toString();
+    const playerProperties = session.property.filter(property => property.playerId._id.toString() === currentPlayerId);
+
+    // Считаем количество полных комплектов
+    let completeSetsCount = 0;
+
+    playerProperties.forEach(propertyGroup => {
+      const { cards } = propertyGroup;
+      if (cards.length === 0) return;
+
+      // Группируем карты по цвету
+      const cardsByColor = cards.reduce((acc, card) => {
+        if (!acc[card.color]) {
+          acc[card.color] = [];
+        }
+        acc[card.color].push(card);
+        return acc;
+      }, {});
+
+      // Проверяем каждую группу карт на наличие полного комплекта
+      Object.values(cardsByColor).forEach(colorGroup => {
+        if (colorGroup.length > 0) {
+          const setSize = colorGroup[0].setSize;
+          if (colorGroup.length >= setSize) {
+            completeSetsCount++;
+          }
+        }
+      });
+    });
+
+    if (completeSetsCount >= 3) {
+      res.send({ success: true, message: 'Player has completed at least three sets.' });
+    } else {
+      res.send({ success: false, message: `Player has only completed ${completeSetsCount} set(s).` });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Internal server error');
   }
 });

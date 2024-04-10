@@ -15,7 +15,6 @@ const DrawCards = () => {
 
     const handleDrawCards = async () => {
         const userName = localStorage.getItem('username'); // Предполагается, что имя пользователя сохранено в localStorage
-
         try {
             const response = await fetch(`/sessions/${title}/draw`, {
                 method: 'POST',

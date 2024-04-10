@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {useParams} from "react-router-dom";
 import { Box, Typography, Card, CardActionArea, Button, CardMedia, CardContent } from '@mui/material';
 
-const UserCards = () => {
+const UserCards = ({currentTurn, currentUser}) => {
     const [cards, setCards] = useState([]);
     const { title } = useParams();
 
@@ -101,17 +101,37 @@ const UserCards = () => {
                             <CardContent>
                                 <Box>
                                     {['money', 'action'].includes(card.type) && (
-                                        <Button size="small" onClick={() => handleAddToBank(card.id)} variant="outlined" color="primary" sx={{ mr: 1 }}>
+                                        <Button
+                                            size="small"
+                                            onClick={() => handleAddToBank(card.id)}
+                                            variant="outlined"
+                                            color="primary"
+                                            sx={{ mr: 1 }}
+                                            disabled={currentUser !== currentTurn} // Дезактивируем кнопку, если не ваш ход
+                                        >
                                             В банк
                                         </Button>
                                     )}
                                     {card.type === 'property' && (
-                                        <Button size="small" onClick={() => handleAddToProperty(card.id)} variant="outlined" color="secondary">
+                                        <Button
+                                            size="small"
+                                            onClick={() => handleAddToProperty(card.id)}
+                                            variant="outlined"
+                                            color="secondary"
+                                            sx={{ mr: 1 }}
+                                            disabled={currentUser !== currentTurn} // Та же логика дезактивации
+                                        >
                                             В собственность
                                         </Button>
                                     )}
                                     {card.type === 'action' && (
-                                        <Button size="small" onClick={() => handleAddToProperty(card.id)} variant="outlined" color="error">
+                                        <Button
+                                            size="small"
+                                            onClick={() => handleAddToBank(card.id)}
+                                            variant="outlined"
+                                            color="error"
+                                            disabled={currentUser !== currentTurn} // Дезактивируем кнопку, если не ваш ход
+                                        >
                                             Сыграть карту
                                         </Button>
                                     )}
@@ -123,6 +143,7 @@ const UserCards = () => {
             </Box>
         </Box>
     );
+
 };
 
 export default UserCards;

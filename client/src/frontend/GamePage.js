@@ -3,36 +3,58 @@ import { useParams } from 'react-router-dom';
 import LeaveSessionButton from "./LeaveSession";
 import UserCards from "./UserCards";
 import DrawCards from "./DrawCards";
-import { Typography, List, ListItem, ListItemAvatar, Avatar, ListItemText, Box, Grid } from '@mui/material';
+import { Typography, List, ListItem, ListItemAvatar, Avatar, ListItemText, Box, Grid, Button } from '@mui/material';
 import PropertyCards from "./PropertyCards";
 import BankCards from "./BankCards";
-
-
 
 const GamePage = () => {
     const { title } = useParams();
     const [sessionDetails, setSessionDetails] = useState(null);
 
     useEffect(() => {
-        const fetchSessionDetails = async () => {
-            try {
-                const response = await fetch(`/sessions/details/${title}`);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const data = await response.json();
-                setSessionDetails(data);
-            } catch (error) {
-                console.error("Error fetching session details:", error);
-            }
-        };
-
         fetchSessionDetails();
     }, [title]);
+
+    const fetchSessionDetails = async () => {
+        try {
+            const response = await fetch(`/sessions/details/${title}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const data = await response.json();
+            setSessionDetails(data);
+        } catch (error) {
+            console.error("Error fetching session details:", error);
+        }
+    };
+
 
     if (!sessionDetails) {
         return <div>Загрузка деталей сессии...</div>;
     }
+
+    const handleEndTurn = async () => {
+        // Предполагаем, что у вас есть доступ к ID текущего пользователя
+        const userId = localStorage.getItem('userId'); // Пример получения userId
+        try {
+            const response = await fetch(`/sessions/endTurn/${title}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ userId }), // Передаем ID пользователя в теле запроса
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to end turn');
+            }
+            // Если сервер успешно обработал запрос, обновляем детали сессии
+            // для отражения изменений в состоянии игры.
+            await fetchSessionDetails(); // Перезапрашиваем детали сессии, чтобы обновить состояние
+        } catch (error) {
+            console.error('Error ending turn:', error);
+        }
+    };
 
 
     return (
@@ -55,8 +77,18 @@ const GamePage = () => {
                             </ListItem>
                         ))}
                     </List>
+                    <Typography variant="h6" gutterBottom>
+                        Ход игрока: {sessionDetails.users.find(user => user._id === sessionDetails.currentTurn)?.name || "Ожидание..."}
+                    </Typography>
                     <DrawCards />
-                    <UserCards />
+                    <Button onClick={handleEndTurn} variant="contained" color="primary">
+                        Закончить ход
+                    </Button>
+                    <UserCards
+                        currentTurn={sessionDetails.currentTurn}
+                        currentUser={localStorage.getItem('userId')} // Пример получения ID текущего пользователя
+                        cards={sessionDetails.playerCards} // Предполагается, что вы также передаёте карты как пропс
+                    />
                 </Grid>
             </Grid>
 
@@ -72,8 +104,6 @@ const GamePage = () => {
             </Box>
         </Box>
     );
-
 }
 
 export default GamePage;
-
