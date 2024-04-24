@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, Typography, Button, CardActions, List, ListItem, ListItemText, Box, Slider } from '@mui/material';
+import { Card, CardContent, Typography, Button, CardActions, List, ListItem, ListItemText } from '@mui/material';
 
 const SessionsList = ({ onJoin }) => {
     const [sessions, setSessions] = useState([]);
 
     useEffect(() => {
-        // Функция для загрузки списка сессий
         const fetchSessions = async () => {
             try {
                 const response = await fetch('/sessions/active');
@@ -20,6 +19,9 @@ const SessionsList = ({ onJoin }) => {
         };
 
         fetchSessions();
+        const intervalId = setInterval(fetchSessions, 3000);
+
+        return () => clearInterval(intervalId);
     }, []);
 
     return (
@@ -51,7 +53,7 @@ const SessionsList = ({ onJoin }) => {
                         </List>
                     </CardContent>
                     <CardActions>
-                        <Button size="small"  onClick={() => onJoin(session)}>Присоединиться</Button>
+                        <Button size="small" onClick={() => onJoin(session)}>Присоединиться</Button>
                     </CardActions>
                 </Card>
             ))}
@@ -60,4 +62,5 @@ const SessionsList = ({ onJoin }) => {
 };
 
 export default SessionsList;
+
 

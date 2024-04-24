@@ -4,25 +4,21 @@ import Button from '@mui/material/Button';
 
 const LeaveSessionButton = ({ sessionTitle }) => {
     const navigate = useNavigate();
-    const userName = localStorage.getItem('username'); // Получение имени пользователя
+    const userName = localStorage.getItem('username');
     const { title } = useParams();
     console.log("Имя пользователя из localStorage:", userName);
 
     const handleLeaveSession = async () => {
         try {
-            // Обновление URL согласно новой структуре эндпоинта
             await fetch(`/sessions/leave/${sessionTitle}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                // Передача только имени пользователя, так как название сессии теперь часть URL
                 body: JSON.stringify({ userName }),
             });
-            // Очистка имени пользователя из localStorage после выхода
             localStorage.removeItem('username');
-            // Опционально: обновите UI или состояние для отражения того, что пользователь покинул сессию
-            navigate('/'); // Перенаправление на главную страницу или список сессий
+            navigate('/');
         } catch (error) {
             console.error("Ошибка при выходе из сессии:", error);
         }

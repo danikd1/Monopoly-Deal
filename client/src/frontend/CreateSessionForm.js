@@ -8,7 +8,7 @@ const CreateSessionForm = () => {
     const navigate = useNavigate();
 
     const handleSubmit = async (event) => {
-        event.preventDefault(); // Предотвращение стандартного поведения формы
+        event.preventDefault();
 
         try {
             const response = await fetch('/sessions', {
@@ -25,9 +25,8 @@ const CreateSessionForm = () => {
 
             const result = await response.json();
             console.log('Session created:', result);
-            // Очистка поля формы после успешного создания сессии
             setTitle('');
-            setMaxPlayers(2); // Сбросить состояние maxPlayers
+            setMaxPlayers(2);
             navigate('/');
         } catch (error) {
             console.error('Error creating session:', error);

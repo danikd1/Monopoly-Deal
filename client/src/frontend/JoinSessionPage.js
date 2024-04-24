@@ -7,8 +7,8 @@ import { Button, Box, Snackbar, Alert, Typography } from '@mui/material';
 const JoinSessionPage = () => {
     const navigate = useNavigate();
     const [selectedSession, setSelectedSession] = useState(null);
-    const [openSnackbar, setOpenSnackbar] = useState(false); // Для управления видимостью Snackbar
-    const [snackbarMessage, setSnackbarMessage] = useState(''); // Сообщение в Snackbar
+    const [openSnackbar, setOpenSnackbar] = useState(false);
+    const [snackbarMessage, setSnackbarMessage] = useState('');
 
     const handleJoin = (session) => {
         setSelectedSession(session);
@@ -42,8 +42,8 @@ const JoinSessionPage = () => {
             navigate(`/game/${title}`);
         } catch (error) {
             console.error("Error joining session:", error);
-            setSnackbarMessage("Ошибка при присоединении к сессии"); // Устанавливаем сообщение об ошибке
-            setOpenSnackbar(true); // Показываем Snackbar
+            setSnackbarMessage("Ошибка при присоединении к сессии");
+            setOpenSnackbar(true);
         }
     };
 

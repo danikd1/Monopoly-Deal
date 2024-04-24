@@ -38,7 +38,20 @@ const gameSessionSchema = new mongoose.Schema({
             ref: 'User',
         },
         cards: [Object] // Массив объектов карт с типом property
-    }]
+    }],
+    currentTurn: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+    },
+    turnOrder: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+    }],
+    winner: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null
+    },
 }, { timestamps: true });
 
 const GameSession = mongoose.model('GameSession', gameSessionSchema);

@@ -48,41 +48,35 @@ app.post('/sessions/join', async (req, res) => {
       return res.status(400).send('Session title and user name are required');
     }
 
-    // Создаем нового пользователя или находим существующего
+    const session = await GameSession.findOne({ title: title });
+    if (!session) {
+      return res.status(404).send('Session not found');
+    }
+
+    // Проверяем, не активна ли уже сессия или заполнена
+    if (session.status === 'active' || session.users.length >= session.maxPlayers) {
+      return res.status(400).send('The session is either active or full');
+    }
+
     let user = await User.findOne({ name: userName });
     if (!user) {
       user = new User({ name: userName });
       await user.save();
     }
 
-    const session = await GameSession.findOne({ title: title });
-    if (!session) {
-      return res.status(404).send('Session not found');
-    }
-
-    if (session.users.length >= session.maxPlayers) {
-      return res.status(400).send('The session is full');
-    }
-
-    // Добавляем пользователя к сессии, если его там еще нет
+    // Добавляем пользователя к сессии, если его там нет
     if (!session.users.includes(user._id)) {
       session.users.push(user._id);
-
-      // Если это первый игрок в сессии, инициализируем turnOrder и устанавливаем currentTurn
-      if (session.users.length === 1) {
-        session.turnOrder = [user._id];
-        session.currentTurn = user._id;
-      }
     }
 
     // Проверяем, стали ли мы активными (достигнут максимум игроков)
     if (session.users.length === session.maxPlayers) {
       session.status = 'active';
-      // Убедитесь, что turnOrder полностью инициализирован, если это не было сделано ранее
-      if (session.turnOrder.length !== session.maxPlayers) {
-        session.turnOrder = session.users;
-        session.currentTurn = session.turnOrder[0]; // Начинаем с первого игрока в списке
-      }
+    }
+
+    if (session.turnOrder.length !== session.maxPlayers) {
+      session.turnOrder = session.users;
+      session.currentTurn = session.turnOrder[0];
     }
 
     // Раздаем карты
@@ -93,10 +87,8 @@ app.post('/sessions/join', async (req, res) => {
     // Добавляем набор карт игроку в сессии
     const playerCardsIndex = session.playerCards.findIndex(entry => entry.playerId.equals(user._id));
     if (playerCardsIndex !== -1) {
-      // Если у игрока уже есть карты, добавляем к ним новые
       session.playerCards[playerCardsIndex].cards.push(...dealtCards);
     } else {
-      // Если у игрока еще нет карт, создаем новую запись
       session.playerCards.push({
         playerId: user._id,
         cards: dealtCards
@@ -118,6 +110,7 @@ app.post('/sessions/join', async (req, res) => {
 });
 
 
+
 /*----------------------------------------------------------------------------------------*/
 // Эндпоинт для получения списка всех активных сессий
 app.get('/sessions/active', async (req, res) => {
@@ -125,7 +118,7 @@ app.get('/sessions/active', async (req, res) => {
     const activeSessions = await GameSession.find({
       status: { $in: ['waiting', 'active'] }
     })
-        .populate('users', 'name -_id') // Опционально: добавляем информацию о пользователях, присоединённых к сессии
+        .populate('users', 'name -_id')
         .exec();
 
     res.status(200).json(activeSessions);
@@ -141,16 +134,15 @@ app.get('/sessions/active', async (req, res) => {
 app.get('/sessions/details/:title', async (req, res) => {
   try {
     const title = req.params.title;
-    // Используем deep population для получения информации как о пользователях, так и о картах в банке
     const sessionDetails = await GameSession.findOne({ title: title })
-        .populate('users', 'name -_id') // Заполняем данные о пользователях
+        .populate('users', 'name _id')
         .populate({
-          path: 'bank.playerId', // Указываем путь для заполнения информации о пользователе в банке
-          select: 'name -_id' // Выбираем только имя пользователя
+          path: 'bank.playerId',
+          select: 'name _id'
         })
         .populate({
-          path: 'property.playerId', // Указываем путь для заполнения информации о пользователе в собственности
-          select: 'name -_id' // Выбираем только имя пользователя
+          path: 'property.playerId',
+          select: 'name _id'
         })
         .exec();
 
@@ -158,7 +150,7 @@ app.get('/sessions/details/:title', async (req, res) => {
       return res.status(404).send('Сессия не найдена');
     }
 
-    res.json(sessionDetails); // Возвращаем детализированную информацию о сессии, включая карты в банке
+    res.json(sessionDetails);
   } catch (error) {
     console.error("Ошибка при получении деталей сессии:", error);
     res.status(500).send(error.message);
@@ -190,8 +182,6 @@ app.post('/sessions/leave/:title', async (req, res) => {
       const playerCards = session.playerCards[playerCardsIndex].cards;
       // Удаляем карты пользователя из сессии
       session.playerCards.splice(playerCardsIndex, 1);
-      // Возвращаем карты пользователя в общую колоду
-      // Например, если у вас есть глобальный массив колоды карт: cards.push(...playerCards);
     }
 
     // Удаляем пользователя из списка участников сессии
@@ -284,10 +274,10 @@ app.post('/sessions/:title/bank', async (req, res) => {
     }
 
     await session.save();
-    res.status(200).send('Card moved to bank successfully');
+    res.json({ message: 'Card moved to bank successfully', bank: bankEntry.cards });
   } catch (error) {
     console.error('Error moving card to bank:', error);
-    res.status(500).send('Server error');
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
@@ -394,8 +384,8 @@ app.post('/sessions/:title/draw', async (req, res) => {
 //Эндпоинт для передачи хода следующему игроку
 app.post('/sessions/endTurn/:title', async (req, res) => {
   try {
-    const { title } = req.params; // Извлекаем title сессии из параметров URL
-    const userId = req.body.userId; // Предполагаем, что userId передаётся в теле запроса
+    const { title } = req.params;
+    const userId = req.body.userId;
 
     const session = await GameSession.findOne({ title: title });
     if (!session) {
@@ -405,32 +395,6 @@ app.post('/sessions/endTurn/:title', async (req, res) => {
     // Проверяем, что действие совершает игрок, чей сейчас ход
     if (session.currentTurn.toString() !== userId) {
       return res.status(403).send("It's not your turn");
-    }
-
-    // Логика для перехода к следующему игроку
-    const currentIndex = session.turnOrder.indexOf(session.currentTurn.toString());
-    const nextIndex = (currentIndex + 1) % session.turnOrder.length;
-    session.currentTurn = session.turnOrder[nextIndex];
-
-    await session.save();
-    res.status(200).send('Turn has been moved to the next player');
-  } catch (error) {
-    console.error('Error moving turn:', error);
-    res.status(500).send(error.message);
-  }
-});
-
-
-/*----------------------------------------------------------------------------------------*/
-//Эндпоинт для проверки 3 полных собранных комплекта
-app.get('/sessions/checkFullSet/:title', async (req, res) => {
-  const { title } = req.params;
-
-  try {
-    const session = await GameSession.findOne({ title }).populate('property.playerId');
-
-    if (!session) {
-      return res.status(404).send('Game session not found');
     }
 
     const currentPlayerId = session.currentTurn.toString();
@@ -464,6 +428,69 @@ app.get('/sessions/checkFullSet/:title', async (req, res) => {
     });
 
     if (completeSetsCount >= 3) {
+      session.status = 'completed';
+      session.winner = userId;
+      await session.save();
+      return res.status(200).send({ message: 'Game Over: Player has collected three complete sets and wins!' });
+    }
+
+    // Логика для перехода к следующему игроку
+    const currentIndex = session.turnOrder.indexOf(session.currentTurn.toString());
+    const nextIndex = (currentIndex + 1) % session.turnOrder.length;
+    session.currentTurn = session.turnOrder[nextIndex];
+
+    await session.save();
+    res.status(200).send('Turn has been moved to the next player');
+  } catch (error) {
+    console.error('Error moving turn:', error);
+    res.status(500).send(error.message);
+  }
+});
+
+
+/*----------------------------------------------------------------------------------------*/
+//Эндпоинт для проверки 3 полных собранных комплекта
+/*app.get('/sessions/checkFullSet/:title', async (req, res) => {
+  const { title } = req.params;
+
+  try {
+    const session = await GameSession.findOne({ title }).populate('property.playerId');
+
+    if (!session) {
+      return res.status(404).send('Game session not found');
+    }
+
+    const currentPlayerId = session.currentTurn.toString();
+    const playerProperties = session.property.filter(property => property.playerId._id.toString() === currentPlayerId);
+
+    let completeSetsCount = 0;
+
+    playerProperties.forEach(propertyGroup => {
+      const { cards } = propertyGroup;
+      if (cards.length === 0) return;
+
+      const cardsByColor = cards.reduce((acc, card) => {
+        if (!acc[card.color]) {
+          acc[card.color] = [];
+        }
+        acc[card.color].push(card);
+        return acc;
+      }, {});
+
+      Object.values(cardsByColor).forEach(colorGroup => {
+        if (colorGroup.length > 0) {
+          const setSize = colorGroup[0].setSize;
+          if (colorGroup.length >= setSize) {
+            completeSetsCount++;
+          }
+        }
+      });
+    });
+
+    if (completeSetsCount >= 3) {
+      session.status = 'completed';
+      session.winner = currentPlayerId;
+      session.save();
       res.send({ success: true, message: 'Player has completed at least three sets.' });
     } else {
       res.send({ success: false, message: `Player has only completed ${completeSetsCount} set(s).` });
@@ -471,5 +498,69 @@ app.get('/sessions/checkFullSet/:title', async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).send('Internal server error');
+  }
+});*/
+
+app.post('/sessions/:title/playBirthday', async (req, res) => {
+  const { title } = req.params;
+  const { userId } = req.body;
+
+  try {
+    const session = await GameSession.findOne({ title }).populate({
+      path: 'playerCards.playerId',
+      match: { 'playerCards.playerId': { $ne: userId } }  // Исключаем карты текущего пользователя
+    });
+
+    if (!session) {
+      return res.status(404).send('Session not found');
+    }
+
+    // Находим карты на руках пользователя
+    const userCards = session.playerCards.find(entry => entry.playerId.toString() === userId);
+    if (!userCards || !userCards.cards) {
+      return res.status(404).send('User cards not found or user has no cards');
+    }
+
+    // Проверяем, что у пользователя есть карта "День рождения"
+    const birthdayCardIndex = userCards.cards.findIndex(card => card.name === "Birthday" && card.type === 'action');
+    if (birthdayCardIndex === -1) {
+      return res.status(400).send('No Birthday card available');
+    }
+
+    // Удаляем карту "День рождения" из карт пользователя
+    userCards.cards.splice(birthdayCardIndex, 1);
+
+    // Перебираем банк каждого игрока
+    session.bank.forEach(bank => {
+      if (!bank.cards) {
+        console.error(`Bank for player ${bank.playerId} has no cards`);
+        return;
+      }
+
+      if (bank.playerId.equals(userId)) return; // Пропускаем банк текущего пользователя
+
+      const paymentCard = bank.cards
+          .filter(card => (card.type === 'money' || card.type === 'action') && card.value >= 2)
+          .sort((a, b) => a.value - b.value)[0]; // Выбираем наименьшую подходящую карту
+
+      if (paymentCard) {
+        // Перемещаем найденную карту в банк пользователя
+        const userBank = session.bank.find(entry => entry.playerId.equals(userId));
+        if (!userBank || !userBank.cards) {
+          console.error(`No bank found for user ${userId} or bank has no cards`);
+          return;
+        }
+        userBank.cards.push(paymentCard);
+        // Удаляем карту из банка платящего игрока
+        const index = bank.cards.indexOf(paymentCard);
+        bank.cards.splice(index, 1);
+      }
+    });
+
+    await session.save();
+    res.status(200).send({ message: 'Birthday card played successfully', bank: session.bank });
+  } catch (error) {
+    console.error('Error processing Birthday card:', error);
+    res.status(500).send('Internal server error: ' + error.message);
   }
 });

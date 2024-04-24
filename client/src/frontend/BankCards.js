@@ -3,7 +3,7 @@ import { Box, CardMedia, Chip, Grid, Paper, Typography } from '@mui/material';
 
 const BankCards = ({ sessionDetails }) => {
     return (
-        <Grid item xs={12} md={3}>
+        <Grid item xs={12} md={6}>
             <Paper elevation={3} sx={{ p: 2 }}>
                 <Typography variant="h5" gutterBottom>
                     Банк

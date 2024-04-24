@@ -1,58 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import {useParams} from "react-router-dom";
 import { Box, Typography, Card, CardActionArea, Button, CardMedia, CardContent } from '@mui/material';
+import { fetchUserCards, addToBank, addToProperty } from '../api.js';
 
-const UserCards = ({currentTurn, currentUser}) => {
+const UserCards = ({currentTurn, currentUser, onAction}) => {
     const [cards, setCards] = useState([]);
     const { title } = useParams();
 
     useEffect(() => {
-        const fetchUserCards = async () => {
+        const userName = localStorage.getItem('username');
+        const fetchCards = async () => {
             try {
-                const userName = localStorage.getItem('username');
-                const response = await fetch('/sessions/cards', {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        // Отправляем имя пользователя в заголовке запроса
-                        'Username': userName,
-                    },
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const data = await response.json();
-                setCards(data);
+                const data = await fetchUserCards(title, userName);
+                const userCards = data.playerCards.find(p => p.playerId === currentUser);
+                setCards(userCards ? userCards.cards : []);
             } catch (error) {
                 console.error("Error fetching user cards:", error);
             }
         };
-
-        fetchUserCards();
-    }, []);
+        fetchCards();
+        const intervalId = setInterval(fetchCards, 1000);
+        return () => clearInterval(intervalId);
+    }, [title, currentUser]);
 
     const handleAddToBank = async (cardId) => {
         const userName = localStorage.getItem('username');
-
         try {
-            const response = await fetch(`/sessions/${title}/bank`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ userName, cardId }),
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to add card to bank');
-            }
-
-            // Обновляем состояние, удаляя карту, добавленную в банк
+            await addToBank(title, userName, cardId);
             const updatedCards = cards.filter(card => card.id !== cardId);
             setCards(updatedCards);
-            console.log('Card added to bank successfully');
+            console.log('Card moved to bank, incrementing action count');
+            onAction();
         } catch (error) {
             console.error('Error moving card to bank:', error);
         }
@@ -60,26 +38,37 @@ const UserCards = ({currentTurn, currentUser}) => {
 
     const handleAddToProperty = async (cardId) => {
         const userName = localStorage.getItem('username');
-
         try {
-            const response = await fetch(`/sessions/${title}/property`, {
+            await addToProperty(title, userName, cardId);
+            const updatedCards = cards.filter(card => card.id !== cardId);
+            setCards(updatedCards);
+            console.log('Card added to property, incrementing action count');
+            onAction();
+        } catch (error) {
+            console.error('Error moving card to bank:', error);
+        }
+    };
+
+    const handlePlayActionCard = async (cardId) => {
+        const userName = localStorage.getItem('username');
+        try {
+            const response = await fetch(`/sessions/${title}/playBirthday`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ userName, cardId }),
+                body: JSON.stringify({ userId: currentUser, cardId }),
             });
 
             if (!response.ok) {
-                throw new Error('Failed to add card to property');
+                throw new Error('Failed to play action card');
             }
 
-            // Обновляем состояние, удаляя карту, добавленную в собственность
             const updatedCards = cards.filter(card => card.id !== cardId);
             setCards(updatedCards);
-            console.log('Card added to property successfully');
+            onAction();
         } catch (error) {
-            console.error('Error moving card to property:', error);
+            console.error('Error playing action card:', error);
         }
     };
 
@@ -107,7 +96,7 @@ const UserCards = ({currentTurn, currentUser}) => {
                                             variant="outlined"
                                             color="primary"
                                             sx={{ mr: 1 }}
-                                            disabled={currentUser !== currentTurn} // Дезактивируем кнопку, если не ваш ход
+                                            disabled={currentUser !== currentTurn}
                                         >
                                             В банк
                                         </Button>
@@ -119,7 +108,7 @@ const UserCards = ({currentTurn, currentUser}) => {
                                             variant="outlined"
                                             color="secondary"
                                             sx={{ mr: 1 }}
-                                            disabled={currentUser !== currentTurn} // Та же логика дезактивации
+                                            disabled={currentUser !== currentTurn}
                                         >
                                             В собственность
                                         </Button>
@@ -127,10 +116,10 @@ const UserCards = ({currentTurn, currentUser}) => {
                                     {card.type === 'action' && (
                                         <Button
                                             size="small"
-                                            onClick={() => handleAddToBank(card.id)}
+                                            onClick={() => handlePlayActionCard(card.id)}
                                             variant="outlined"
                                             color="error"
-                                            disabled={currentUser !== currentTurn} // Дезактивируем кнопку, если не ваш ход
+                                            disabled={currentUser !== currentTurn}
                                         >
                                             Сыграть карту
                                         </Button>

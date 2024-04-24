@@ -1,91 +1,138 @@
-// DrawCards.js
-import React, {useState} from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { Button, Zoom, Box, Snackbar } from '@mui/material';
-import MuiAlert from '@mui/material/Alert';
+import LeaveSessionButton from "./LeaveSession";
+import UserCards from "./UserCards";
+import DrawCards from "./DrawCards";
+import { Typography, List, ListItem, ListItemAvatar, Avatar, ListItemText, Box, Grid, Button, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, CircularProgress } from '@mui/material';
+import PropertyCards from "./PropertyCards";
+import BankCards from "./BankCards";
 
-const Alert = React.forwardRef(function Alert(props, ref) {
-    return <MuiAlert elevation={6} ref={ref} variant="filled" {...props} />;
-});
-const DrawCards = () => {
-    const { title } = useParams(); // Используем название сессии из URL
-    const [cards, setCards] = useState([]);
-    const [hovered, setHovered] = useState(false);
-    const [openSnackbar, setOpenSnackbar] = useState(false);
+const GamePage = () => {
+    const { title } = useParams();
+    const [sessionDetails, setSessionDetails] = useState(null);
+    const [open, setOpen] = useState(false);
+    const [actionCount, setActionCount] = useState(0);
 
-    const handleDrawCards = async () => {
-        const userName = localStorage.getItem('username'); // Предполагается, что имя пользователя сохранено в localStorage
+    useEffect(() => {
+        const intervalId = setInterval(() => {
+            fetchSessionDetails();
+        }, 1000);
+        return () => clearInterval(intervalId);
+    }, [title]);
+
+    const fetchSessionDetails = async () => {
         try {
-            const response = await fetch(`/sessions/${title}/draw`, {
+            const response = await fetch(`/sessions/details/${title}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const data = await response.json();
+            setSessionDetails(data);
+            if (data.status === 'completed' && data.winner) {
+                setOpen(true);
+            }
+        } catch (error) {
+            console.error("Error fetching session details:", error);
+        }
+    };
+
+    const handleEndTurn = useCallback(async () => {
+        const userId = localStorage.getItem('userId');
+        try {
+            const response = await fetch(`/sessions/endTurn/${title}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userName }),
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ userId }),
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
+                throw new Error('Failed to end turn');
             }
-
-            // Обработка успешного взятия карт
-            const data = await response.json();
-            setCards(data);
+            await fetchSessionDetails();
+            setActionCount(0);
         } catch (error) {
-            console.error('Error drawing cards:', error);
-            setOpenSnackbar(true); // Показываем Snackbar при ошибке
+            console.error('Error ending turn:', error);
         }
-    };
+    }, [title]);
 
-    const handleCloseSnackbar = (event, reason) => {
-        if (reason === 'clickaway') {
-            return;
+    const incrementActionCount = useCallback(() => {
+        setActionCount(prevCount => prevCount + 1);
+    }, []);
+
+    useEffect(() => {
+        if (actionCount >= 3) {
+            handleEndTurn();
         }
-        setOpenSnackbar(false);
+    }, [actionCount, handleEndTurn]);
+
+    if (!sessionDetails) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+                <CircularProgress />
+            </Box>
+        );
+    }
+
+    const handleClose = () => {
+        setOpen(false);
     };
 
     return (
-        <Box
-            sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'left',
-                mt: 3,
-                mb: 3
-            }}
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
-        >
-            <Zoom in={true} style={{ transitionDelay: hovered ? '100ms' : '0ms' }}>
-                <img
-                    src={`${process.env.PUBLIC_URL}/images/back.png`}
-                    alt="Колода карт"
-                    style={{
-                        maxWidth: '200px',
-                        height: 'auto',
-                        marginBottom: '10px',
-                        transform: hovered ? 'scale(1.1)' : 'scale(1)',
-                        transition: 'transform 0.3s'
-                    }}
-                />
-            </Zoom>
-            <Zoom in={true} style={{ transitionDelay: hovered ? '100ms' : '0ms' }}>
-                <Box textAlign="left">
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        onClick={handleDrawCards}
-                    >
-                        Взять две карты из колоды
+        <Box sx={{ flexGrow: 1, p: 3 }}>
+            <Dialog open={open} onClose={handleClose}>
+                <DialogTitle>Игра окончена!</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        {sessionDetails?.winner} выиграл игру собрав три полных комплекта собственности!
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Box sx={{ mt: -3 }}>
+                        <LeaveSessionButton sessionTitle={sessionDetails.title} />
+                    </Box>
+                </DialogActions>
+            </Dialog>
+            <Grid container spacing={3}>
+                <Grid item xs={12}>
+                    <Typography variant="h4" gutterBottom>
+                        Игровая сессия: {sessionDetails.title}
+                    </Typography>
+                    <List>
+                        {sessionDetails.users.map((user, index) => (
+                            <ListItem key={index}>
+                                <ListItemAvatar>
+                                    <Avatar alt={user.name} src={user.avatar} />
+                                </ListItemAvatar>
+                                <ListItemText primary={user.name} />
+                            </ListItem>
+                        ))}
+                    </List>
+                    <Typography variant="h6" gutterBottom>
+                        Ход игрока: {sessionDetails.users.find(user => user._id === sessionDetails.currentTurn)?.name || "Ожидание..."}
+                    </Typography>
+                    <DrawCards currentTurn={sessionDetails.currentTurn} />
+                    <Button onClick={handleEndTurn} variant="contained" color="primary">
+                        Закончить ход
                     </Button>
-                </Box>
-            </Zoom>
-            {/* Snackbar для отображения уведомления */}
-            <Snackbar open={openSnackbar} autoHideDuration={6000} onClose={handleCloseSnackbar}>
-                <Alert onClose={handleCloseSnackbar} severity="error" sx={{ width: '100%' }}>
-                    Достигнут лимит карт
-                </Alert>
-            </Snackbar>
+                    <UserCards
+                        currentTurn={sessionDetails.currentTurn}
+                        currentUser={localStorage.getItem('userId')}
+                        cards={sessionDetails.playerCards}
+                        onAction={incrementActionCount}
+                    />
+                </Grid>
+            </Grid>
+            <Grid container spacing={2} sx={{ mt: 3 }}>
+                <BankCards sessionDetails={sessionDetails} />
+                <PropertyCards sessionDetails={sessionDetails} />
+            </Grid>
+            <Box sx={{ mt: 4 }}>
+                <LeaveSessionButton sessionTitle={sessionDetails.title} />
+            </Box>
         </Box>
     );
 };
 
-export default DrawCards;
+export default GamePage;
